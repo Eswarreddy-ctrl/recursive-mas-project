@@ -1,76 +1,69 @@
-"""
-tests/test_schemas.py — Pydantic schema validation tests.
-Day: Monday (Week 1)  |  ~16 assertions
-"""
+"""Schema tests — Pydantic models and computed properties.
 
+OWNER: P3 (QA/DevOps)
+"""
 import pytest
-from pydantic import ValidationError
-from models.schemas import (
-    Ticket, SentimentResult, PriorityResult, CategoryResult, ResolutionResult,
-    WorkflowMetrics, WorkflowResult, ComparisonResponse,
-    Sentiment, Priority, Category, Department,
+
+from backend.models.schemas import (
+    BenchmarkResult,
+    QualityScore,
+    QueryInput,
+    StageMetrics,
+    WorkflowRun,
 )
 
 
-class TestTicket:
-    def test_valid_minimal(self):
-        t = Ticket(ticket_id="T001", text="Need billing help.")
-        assert t.customer_id is None
-
-    def test_valid_full(self):
-        t = Ticket(ticket_id="T002", text="Login issue.", customer_id="C99")
-        assert t.customer_id == "C99"
-
-    def test_empty_text_rejected(self, empty_text_ticket_data):
-        with pytest.raises(ValidationError) as exc:
-            Ticket(**empty_text_ticket_data)
-        assert "text" in str(exc.value)
-
-    def test_missing_ticket_id_rejected(self):
-        with pytest.raises(ValidationError):
-            Ticket(text="Some text")  # type: ignore
+def test_query_input_requires_text():
+    qi = QueryInput(query="hello")
+    assert qi.query == "hello"
 
 
-class TestSentimentResult:
-    def test_valid(self):
-        s = SentimentResult(sentiment=Sentiment.NEGATIVE, confidence=0.95, raw_text="x")
-        assert s.sentiment == Sentiment.NEGATIVE
-
-    def test_confidence_above_1_rejected(self):
-        with pytest.raises(ValidationError):
-            SentimentResult(sentiment=Sentiment.POSITIVE, confidence=1.1, raw_text="x")
-
-    def test_confidence_below_0_rejected(self):
-        with pytest.raises(ValidationError):
-            SentimentResult(sentiment=Sentiment.POSITIVE, confidence=-0.1, raw_text="x")
-
-    def test_invalid_sentiment_rejected(self):
-        with pytest.raises(ValidationError):
-            SentimentResult(sentiment="furious", confidence=0.5, raw_text="x")  # type: ignore
+def test_quality_score_average():
+    q = QualityScore(correctness=8, completeness=6, relevance=10, tone=8)
+    # (8 + 6 + 10 + 8) / 4 = 8.0
+    assert q.average == 8.0
 
 
-class TestWorkflowMetrics:
-    def test_negative_tokens_rejected(self):
-        with pytest.raises(ValidationError):
-            WorkflowMetrics(total_tokens=-1, total_llm_calls=5,
-                            wall_clock_time_seconds=1.0, max_context_size=100, communication_flow=[])
-
-    def test_negative_time_rejected(self):
-        with pytest.raises(ValidationError):
-            WorkflowMetrics(total_tokens=100, total_llm_calls=5,
-                            wall_clock_time_seconds=-0.1, max_context_size=100, communication_flow=[])
+def test_quality_score_defaults_to_zero():
+    q = QualityScore()
+    assert q.average == 0.0
 
 
-class TestComparisonResponse:
-    def test_recursive_fewer_tokens(self, sample_comparison):
-        assert sample_comparison.recursive.metrics.total_tokens < sample_comparison.traditional.metrics.total_tokens
+def test_quality_score_bounds_enforced():
+    with pytest.raises(Exception):
+        QualityScore(correctness=11)  # > 10 should fail validation
+    with pytest.raises(Exception):
+        QualityScore(tone=-1)  # < 0 should fail validation
 
-    def test_recursive_lower_max_context(self, sample_comparison):
-        """⭐ Core metric: RecursiveMAS must have smaller max context size."""
-        assert sample_comparison.recursive.metrics.max_context_size < sample_comparison.traditional.metrics.max_context_size
 
-    def test_speedup_greater_than_1(self, sample_comparison):
-        assert sample_comparison.speedup_factor > 1.0
+def test_quality_dump_with_average_includes_average():
+    q = QualityScore(correctness=7, completeness=7, relevance=7, tone=7)
+    d = q.model_dump_with_average()
+    assert d["average"] == 7.0
+    assert set(d) >= {"correctness", "completeness", "relevance", "tone", "average"}
 
-    def test_token_reduction_positive(self, sample_comparison):
-        assert sample_comparison.token_reduction_pct > 0
+
+def test_workflow_run_duration_seconds_property():
+    wr = WorkflowRun(label="X", duration_ms=2500.0)
+    assert wr.duration_s == 2.5
+
+
+def test_workflow_run_quality_avg_property():
+    wr = WorkflowRun(label="X", quality=QualityScore(correctness=9, completeness=9,
+                                                     relevance=9, tone=9))
+    assert wr.quality_avg == 9.0
+
+
+def test_stage_metrics_defaults():
+    s = StageMetrics(name="Classify")
+    assert s.total_tokens == 0
+    assert s.llm_calls == 0
+
+
+def test_benchmark_result_all_fields_present():
+    b = BenchmarkResult(query="q")
+    # 4 buckets × (time, tokens, cost, quality, calls)
+    for prefix in ("traditional", "recursive_r1", "recursive_r2", "recursive_r3"):
+        for suffix in ("time", "tokens", "cost", "quality", "calls"):
+            assert hasattr(b, f"{prefix}_{suffix}")
+    assert b.backend_mode == "mock"

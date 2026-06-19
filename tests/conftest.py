@@ -1,91 +1,45 @@
+"""Shared pytest fixtures.
+
+OWNER: P3 (QA/DevOps)
+
+Provides a deterministic, offline LLMService (mock backend, no latency sleep)
+and reusable service instances so the whole suite runs without a GEMINI_API_KEY.
 """
-tests/conftest.py — Shared pytest fixtures.
-"""
+import os
+import sys
 
 import pytest
-from models.schemas import (
-    Ticket, SentimentResult, PriorityResult, CategoryResult, ResolutionResult,
-    WorkflowMetrics, WorkflowResult, ComparisonResponse,
-    Sentiment, Priority, Category, Department,
-)
+
+# Make the project root importable (so `backend.*` resolves) when pytest is run
+# from the repo root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.services.llm_service import LLMService          # noqa: E402
+from backend.benchmarks.benchmark_service import BenchmarkService  # noqa: E402
 
 
 @pytest.fixture
-def simple_ticket():
-    return Ticket(ticket_id="T001", text="My invoice is wrong, please help.", customer_id="C42")
+def llm():
+    """Deterministic mock LLM (no API key, no real latency)."""
+    # Ensure no key leaks in from the environment during tests.
+    os.environ.pop("GEMINI_API_KEY", None)
+    return LLMService(simulate_latency=False)
+
 
 @pytest.fixture
-def angry_ticket():
-    return Ticket(ticket_id="T002", text="This is terrible! My account is broken and nobody helps!")
+def benchmark_service(llm):
+    return BenchmarkService(llm)
+
 
 @pytest.fixture
-def technical_ticket():
-    return Ticket(ticket_id="T003", text="The app crashes every time I login. Urgent fix needed.")
+def sample_query():
+    return "Payment was deducted twice but my order is not confirmed. Please fix urgently."
+
 
 @pytest.fixture
-def empty_text_ticket_data():
-    return {"ticket_id": "T_BAD", "text": ""}
-
-@pytest.fixture
-def sample_traditional_metrics():
-    return WorkflowMetrics(
-        total_tokens=1200, total_llm_calls=5, wall_clock_time_seconds=4.5,
-        max_context_size=3200,
-        communication_flow=["Ticket->Sentiment", "Sentiment->Priority", "Priority->Category", "Category->Resolution", "Resolution->Output"],
-    )
-
-@pytest.fixture
-def sample_recursive_metrics():
-    return WorkflowMetrics(
-        total_tokens=620, total_llm_calls=5, wall_clock_time_seconds=2.1,
-        max_context_size=980,
-        communication_flow=["Root->CustomerCoord", "CustomerCoord->Sentiment", "CustomerCoord->Category", "Root->BusinessCoord", "BusinessCoord->Resolution"],
-    )
-
-@pytest.fixture
-def sample_sentiment():
-    return SentimentResult(sentiment=Sentiment.NEGATIVE, confidence=0.91, raw_text="sentiment:negative")
-
-@pytest.fixture
-def sample_priority():
-    return PriorityResult(priority=Priority.HIGH, reasoning="Urgent language detected", raw_text="priority:high")
-
-@pytest.fixture
-def sample_category():
-    return CategoryResult(category=Category.BILLING, raw_text="category:billing")
-
-@pytest.fixture
-def sample_resolution():
-    return ResolutionResult(routing=Department.BILLING, suggested_action="Review charge", raw_text="routing:billing")
-
-@pytest.fixture
-def sample_traditional_result(simple_ticket, sample_traditional_metrics,
-                               sample_sentiment, sample_priority, sample_category, sample_resolution):
-    return WorkflowResult(
-        workflow_name="traditional", ticket_id=simple_ticket.ticket_id,
-        sentiment=sample_sentiment, priority=sample_priority,
-        category=sample_category, resolution=sample_resolution,
-        metrics=sample_traditional_metrics,
-    )
-
-@pytest.fixture
-def sample_recursive_result(simple_ticket, sample_recursive_metrics,
-                             sample_sentiment, sample_priority, sample_category, sample_resolution):
-    return WorkflowResult(
-        workflow_name="recursive", ticket_id=simple_ticket.ticket_id,
-        sentiment=sample_sentiment, priority=sample_priority,
-        category=sample_category, resolution=sample_resolution,
-        metrics=sample_recursive_metrics,
-    )
-
-@pytest.fixture
-def sample_comparison(sample_traditional_result, sample_recursive_result):
-    trad, rec = sample_traditional_result, sample_recursive_result
-    return ComparisonResponse(
-        ticket_id=trad.ticket_id,
-        traditional=trad,
-        recursive=rec,
-        token_reduction_pct=(1 - rec.metrics.total_tokens / trad.metrics.total_tokens) * 100,
-        speedup_factor=trad.metrics.wall_clock_time_seconds / rec.metrics.wall_clock_time_seconds,
-        context_size_reduction_pct=(1 - rec.metrics.max_context_size / trad.metrics.max_context_size) * 100,
-    )
+def sample_queries():
+    return [
+        "How do I reset my password?",
+        "The app keeps crashing on Android 14.",
+        "I want a refund for a damaged item.",
+    ]
