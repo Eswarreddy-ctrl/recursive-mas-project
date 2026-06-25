@@ -1,0 +1,27 @@
+# Deploys the FastAPI backend and the Streamlit dashboard as two web services.
+services:
+  - type: web
+    name: recursivemas-api
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: GEMINI_API_KEY
+        sync: false          # set in the Render dashboard; blank => mock mode
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+
+  - type: web
+    name: recursivemas-dashboard
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "streamlit run frontend/app.py --server.port $PORT --server.address 0.0.0.0"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: API_URL
+        sync: false          # set to the deployed recursivemas-api URL
