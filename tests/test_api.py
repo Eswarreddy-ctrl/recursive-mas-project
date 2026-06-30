@@ -10,7 +10,13 @@ os.environ.pop("GEMINI_API_KEY", None)
 
 try:
     from fastapi.testclient import TestClient
-    from backend.main import app
+    from backend.main import app  # load_dotenv() inside may re-set GEMINI_API_KEY from .env
+    import backend.api.routes as _routes
+    from backend.benchmarks.benchmark_service import BenchmarkService
+    from backend.services.llm_service import LLMService
+    # pop again after load_dotenv ran, then reset the module-level singleton
+    os.environ.pop("GEMINI_API_KEY", None)
+    _routes._service = BenchmarkService(LLMService(simulate_latency=False))
     _client = TestClient(app)
     _HAS_FASTAPI = True
 except Exception:  # pragma: no cover
