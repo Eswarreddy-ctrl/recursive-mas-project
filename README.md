@@ -1,4 +1,4 @@
-# RecursiveMAS Benchmark Dashboard
+# RecursiveMAS Benchmark Dashboard <!-- auto-deploy test -->
 
 A research-benchmark dashboard comparing a **Traditional (flat) Multi-Agent System**
 against a **RecursiveMAS** across **three recursion rounds**, measuring inference
