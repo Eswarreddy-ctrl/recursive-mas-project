@@ -128,7 +128,7 @@ Plus an auto-generated research summary strip.
 
 ## Testing (P3 — QA/DevOps)
 
-Runs fully offline in mock mode (no API key needed).
+Runs fully offline in mock mode (no API key needed)
 
 ```bash
 pytest tests/ -v
