@@ -18,3 +18,4 @@ class BaseAgent:
         """Run the agent on the given content. Returns the LLMService dict."""
         result = self.llm.generate(self.system_prompt, content, max_tokens=max_tokens)
         return result.as_dict() | {"_context_chars": len(self.system_prompt) + len(content)}
+    
